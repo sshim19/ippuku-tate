@@ -5,6 +5,7 @@
 
 import * as constants from "../engine/constants.mjs";
 import { drawFx, drawSheen, revealZoom } from "./fx.mjs";
+import { drawMotionGuides } from "./hand-guides.mjs";
 
 export const VIEW_W = constants.VIEW_W ?? 640;
 export const VIEW_H = constants.VIEW_H ?? 360;
@@ -784,8 +785,9 @@ export function drawScene(ctx, state, opts = {}) {
   drawSheen(ctx, bview, fx, TEA_R);
   drawPour(ctx, bview, fx);
   drawChasen(ctx, view, opts.right || { active: false, x: WHISK_HOME_X, y: WHISK_HOME_Y }, reduced, off);
-  drawGripMark(ctx, bview, state, fx?.clock || 0, reduced);
-  drawTempoGuides(ctx, view, state, fx?.clock || 0, reduced);
+  if (state.hintLeft === false) drawGripMark(ctx, bview, state, fx?.clock || 0, reduced);
+  if (state.hintRight === false) drawTempoGuides(ctx, view, state, fx?.clock || 0, reduced);
+  drawMotionGuides(ctx, view, state);
   drawGripContact(ctx, view, state, opts.left, off);
   drawTouchRings(ctx, view, opts);
   drawFx(ctx, fx, { ...view, reducedMotion: reduced }, state);
