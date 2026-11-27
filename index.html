@@ -28,19 +28,19 @@
             <button type="button" class="btn-serve" id="btn-serve" hidden disabled aria-disabled="true">出す</button>
           </header>
 
-          <canvas id="game" width="640" height="360" aria-label="プレイ画面。左の指で茶碗を押さえ、右の指で茶せんを動かします"></canvas>
+          <canvas id="game" width="640" height="360" aria-label="プレイ画面。左の親指で茶碗のふちを押さえ、右の親指でWの字を書くように振ります"></canvas>
 
           <div class="hud" id="play-hud" hidden>
             <p class="hud-time" id="hud-time"></p>
           </div>
 
-          <p class="hint hint-left" id="hint-left" hidden>押さえる</p>
-          <p class="hint hint-right" id="hint-right" hidden>茶せん</p>
+          <p class="hint hint-left" id="hint-left" hidden>ふちを押さえる</p>
+          <p class="hint hint-right" id="hint-right" hidden>Wの字に振る</p>
 
           <section class="panel" id="screen-title">
             <h1 tabindex="-1">一服点て</h1>
-            <p class="lead">茶碗がぶれないように押さえて、茶せんの調子をそろえると、泡がきめ細かくなります。</p>
-            <p class="rule">横向きにして、左の指で茶碗のふちを押さえ、右の指で茶せんを上下に動かします。茶せんに押されて茶碗がずれるので、左の指で押し返して輪の中に保ちます。毎日、同じ一服を点てます。時間が来ると、そのときの泡で一服になります。</p>
+            <p class="lead">左の親指で茶碗のふちを押さえ、右の親指でWの字を書くように左右に振ります。茶碗が輪の中で止まっていると、泡がきめ細かくなります。</p>
+            <p class="rule">横向きにして、左の親指で茶碗のふちを押さえ、右の親指でWの字を書くように左右に振ります。茶せんに押されて茶碗がずれるので、ずれた方と逆へ指を寄せて、畳の輪の中に戻します。指を離すと茶碗がすべって、お茶がこぼれます。茶碗がぶれず、振りの幅と速さがそろっていると、泡が細かくなります。毎日、同じ一服を点てます。時間が来ると、そのときの泡で一服になります。</p>
             <p class="meta" id="title-daily">今日は、湯はふつう、抹茶はふつう。</p>
             <p class="meta" id="title-date">今日の一服</p>
             <p class="meta" id="title-record">記録はまだありません</p>
