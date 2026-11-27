@@ -13,7 +13,7 @@
  *   }。
  *     x, y はそのフレームの論理 wu。active が false のとき x, y は無視する。
  *     serve はそのフレームの立ち上がりだけ true。
- *     landscape が false なら、tick は回す・茶せん・出すを無視する（減衰のみ）。
+ *     landscape が false なら、tick は押さえる・茶せん・出すを無視する（減衰のみ）。
  *   tick は input を書き換えない。
  */
 import { tick, createInitialState } from "./engine/sim.mjs";
