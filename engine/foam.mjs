@@ -6,6 +6,7 @@ import {
   FOAM_B_ALIGN,
   FOAM_B_GAIN,
   FOAM_B_IDLE,
+  FOAM_B_SPLASH,
   FOAM_C_GAIN,
   FOAM_C_IDLE,
   FOAM_F_ALIGN,
@@ -33,14 +34,12 @@ export function coverGate(C) {
   return smoothstep(C, COVER_GATE_LO, COVER_GATE_HI);
 }
 
-export function overspeedValue(omega, tempo, params) {
+/** How far the whisk runs past tempo_target + 0.6·tol, in tolerances (0–1.5). */
+export function overspeedValue(tempo, params) {
   const tTol = Math.max(Number(params?.tempoTol) || 0, 1e-6);
-  const wTol = Math.max(Number(params?.omegaTol) || 0, 1e-6);
   const tThresh = (Number(params?.tempoTarget) || 0) + OVERSPEED_MARGIN * tTol;
-  const wThresh = (Number(params?.omegaTarget) || 0) + OVERSPEED_MARGIN * wTol;
-  let v = 0;
-  if (tempo > tThresh) v = Math.max(v, (tempo - tThresh) / tTol);
-  if (omega > wThresh) v = Math.max(v, (omega - wThresh) / wTol);
+  const t = Number(tempo) || 0;
+  const v = t > tThresh ? (t - tThresh) / tTol : 0;
   return clamp(v, 0, OVERSPEED_MAX);
 }
 
@@ -53,7 +52,7 @@ export function overshootValue(aligned) {
   return Math.max(0, OVERSHOOT_ALIGN - a);
 }
 
-export function foamRates({ C, F, B, energy, aligned, overspeed, idle, params }) {
+export function foamRates({ C, F, B, energy, aligned, overspeed, splash = 0, idle, params }) {
   const matchaK = Math.max(Number(params?.matchaK) || 1, 1e-6);
   const tempK = Number(params?.tempK) || 1;
   const tempFineK = Number(params?.tempFineK) || 1;
@@ -71,7 +70,9 @@ export function foamRates({ C, F, B, energy, aligned, overspeed, idle, params })
       gate -
     FOAM_F_OVER * overshoot * F -
     FOAM_F_IDLE * idleN * F;
-  const dB = FOAM_B_GAIN * tempBubbleK * os - FOAM_B_ALIGN * a * B - FOAM_B_IDLE * idleN * B;
+  const sp = clamp(Number(splash) || 0, 0, 1);
+  const dB =
+    (FOAM_B_GAIN * os + FOAM_B_SPLASH * sp) * tempBubbleK - FOAM_B_ALIGN * a * B - FOAM_B_IDLE * idleN * B;
   return { dC, dF, dB, overshoot, coverGate: gate };
 }
 

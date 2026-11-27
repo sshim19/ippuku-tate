@@ -19,11 +19,34 @@ export const BOWL_CX = 208;
 export const BOWL_CY = 196;
 export const BOWL_VISUAL_R = 86;
 
-/** Spin weight: 0 at 44, 1 on 56–108, 0 at 128; outside 128 decays. */
-export const SPIN_R0 = 44;
-export const SPIN_R1 = 56;
-export const SPIN_R2 = 108;
-export const SPIN_R3 = 128;
+/** Left thumb holds the bowl when it lands 58–118wu from the bowl's current centre. */
+export const HOLD_R0 = 58;
+export const HOLD_R1 = 118;
+/** A held thumb slips off once it is more than this far from the centre. */
+export const HOLD_SLIP_R = 136;
+/** Bowl offset from home is clamped here (it stops against the tatami edge). */
+export const BOWL_MAX_OFFSET = 48;
+
+/** Bowl response. Held: d' = HOLD_RATE·(h + u − d). Free: d' = FREE_SLIDE·u − FREE_RETURN·d. */
+export const HOLD_RATE = 7;
+export const FREE_SLIDE = 1.6;
+export const FREE_RETURN = 0.25;
+/** u = PUSH_OSC·pushK·v_whisk + DRIFT_MAX·tanh(DRIFT_GAIN·pushK·|v_whisk| / DRIFT_MAX)·dir(t). v in wu/s. */
+export const PUSH_OSC = 0.018;
+export const DRIFT_GAIN = 0.2;
+/** Saturation of the steady push (wu). */
+export const DRIFT_MAX = 30;
+export const WHISK_VEL_TAU = 0.05;
+export const WHISK_SPEED_TAU = 0.35;
+/** Steadiness error = |d| + STEADY_VEL_W·|d'|; 1 − max(0, err − dead)/steadyTol; smoothed. */
+export const STEADY_VEL_W = 0.06;
+export const STEADY_TAU = 0.6;
+/** Error below this many wu counts as perfectly still (a thumb is never exactly still). */
+export const STEADY_DEAD = 4;
+export const SETTLE_RATE = 3;
+/** Splash: bowl far from home while whisking. */
+export const SPLASH_R = 10;
+export const SPLASH_W = 20;
 
 export const POUR_TIME = 1.6;
 export const WHISK_TIME = 75;
@@ -33,8 +56,6 @@ export const DAILY_LINE_TIME = 2.5;
 export const FIXED_DT = 1 / 60;
 export const MAX_DT = 0.05;
 
-export const OMEGA_SMOOTH_TAU = 0.12;
-export const OMEGA_DECAY_TAU = 0.2;
 export const TEMPO_SMOOTH_TAU = 0.15;
 export const TEMPO_DECAY_TAU = 0.2;
 
@@ -64,22 +85,21 @@ export const AXIS_ALIGN_DEG = 32;
 export const AXIS_WEIGHT = 0.2;
 export const STABLE_WEIGHT = 0.15;
 
-export const ALIGN_OMEGA_MIN = 0.15;
 export const ALIGN_TEMPO_MIN = 1.0;
-export const RATIO_OMEGA_FLOOR = 0.05;
 
 export const FOAM_C_GAIN = 0.022;
 export const FOAM_C_IDLE = 0.004;
-export const FOAM_F_ALIGN = 0.024;
-export const FOAM_F_ALIGN_EXP = 1.2;
-export const FOAM_F_ENERGY = 0.01;
-export const FOAM_F_ENERGY_SCALE = 0.25;
+export const FOAM_F_ALIGN = 0.032;
+export const FOAM_F_ALIGN_EXP = 1.6;
+export const FOAM_F_ENERGY = 0.0065;
+export const FOAM_F_ENERGY_SCALE = 0.17;
 export const FOAM_F_OVER = 0.02;
 export const FOAM_F_IDLE = 0.012;
 /** Tuned from 0.035 so a 1.35×-tempo novice does not fill B in 20s (see DESIGN.md §3). */
 export const FOAM_B_GAIN = 0.012;
 export const FOAM_B_ALIGN = 0.018;
 export const FOAM_B_IDLE = 0.01;
+export const FOAM_B_SPLASH = 0.04;
 export const COVER_GATE_LO = 0.15;
 export const COVER_GATE_HI = 0.45;
 export const OVERSPEED_MARGIN = 0.6;
@@ -98,16 +118,18 @@ export const STORAGE_DAILY_PREFIX = "ippuku-tate:daily:";
 export const STORAGE_MUTED = "ippuku-tate:muted";
 export const SEED_PREFIX = "ippuku-tate:";
 
-export const OMEGA_TARGET_MIN = 0.45;
-export const OMEGA_TARGET_MAX = 0.85;
 export const TEMPO_TARGET_MIN = 3.0;
 export const TEMPO_TARGET_MAX = 5.2;
-export const OMEGA_TOL_MIN = 0.22;
-export const OMEGA_TOL_MAX = 0.32;
+export const STEADY_TOL_MIN = 2.5;
+export const STEADY_TOL_MAX = 12;
 export const TEMPO_TOL_MIN = 0.7;
 export const TEMPO_TOL_MAX = 1.0;
-export const RATIO_TOL_MIN = 0.55;
-export const RATIO_TOL_MAX = 0.8;
+export const PUSH_K_MIN = 0.4;
+export const PUSH_K_MAX = 1.1;
+export const DRIFT_PERIOD_MIN = 5.5;
+export const DRIFT_PERIOD_MAX = 18;
+export const DRIFT_SWING_MIN = 0.25;
+export const DRIFT_SWING_MAX = 1.5;
 
 export const MATCHA_TABLE = [
   { matcha: "light", matchaK: 0.82 },
@@ -163,12 +185,4 @@ export function clamp(x, lo, hi) {
   if (n < lo) return lo;
   if (n > hi) return hi;
   return n;
-}
-
-export function spinWeight(r) {
-  const x = Number(r) || 0;
-  if (x <= SPIN_R0 || x >= SPIN_R3) return 0;
-  if (x < SPIN_R1) return (x - SPIN_R0) / (SPIN_R1 - SPIN_R0);
-  if (x <= SPIN_R2) return 1;
-  return (SPIN_R3 - x) / (SPIN_R3 - SPIN_R2);
 }

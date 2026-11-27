@@ -11,13 +11,8 @@ import {
 } from "./constants.mjs";
 import { dailyParams } from "./daily.mjs";
 import { computeScore, gradeForScore, overspeedValue, stepFoam } from "./foam.mjs";
-import {
-  computeAlignment,
-  emptyLeft,
-  emptyRight,
-  updateLeft,
-  updateRight,
-} from "./gesture.mjs";
+import { emptyBowl, splashValue, updateBowl } from "./bowl.mjs";
+import { computeAlignment, emptyRight, updateRight } from "./gesture.mjs";
 import { hashSeed } from "./rng.mjs";
 
 export { computeScore, gradeForScore };
@@ -26,7 +21,7 @@ function cloneState(s) {
   return {
     ...s,
     params: { ...s.params },
-    left: { ...s.left },
+    bowl: { ...s.bowl },
     right: {
       ...s.right,
       samples: (s.right.samples || []).map((p) => ({ ...p })),
@@ -42,24 +37,34 @@ function handsActive(input) {
 
 function refreshAlignment(s, input) {
   const hands = handsActive(input);
-  const a = computeAlignment(s.left.omega, s.right.tempo, s.right.pathQ, s.params, hands.left && hands.right);
+  const handsOn = hands.left && hands.right && !!s.bowl.held;
+  const a = computeAlignment(s.bowl.steady, s.right.tempo, s.right.pathQ, s.params, handsOn);
   s.aligned = a.aligned;
   s.energy = a.energy;
-  s.overspeed = overspeedValue(s.left.omega, s.right.tempo, s.params);
+  s.steady = s.bowl.held ? s.bowl.steady : 0;
+  s.overspeed = overspeedValue(s.right.tempo, s.params);
+  s.splash = splashValue(s.bowl, s.phase === "whisk" && hands.right && s.energy > 0.2);
+}
+
+function finitePos(p) {
+  const x = Number(p?.x);
+  const y = Number(p?.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 }
 
 function applyGestures(s, input, dt, now, active) {
-  const leftPos = active && input?.left?.active ? { x: Number(input.left.x), y: Number(input.left.y) } : null;
-  const rightPos = active && input?.right?.active ? { x: Number(input.right.x), y: Number(input.right.y) } : null;
-  const prevOmega = s.left.omega;
+  const leftPos = active && input?.left?.active ? finitePos(input.left) : null;
+  const rightPos = active && input?.right?.active ? finitePos(input.right) : null;
   const prevRevs = (s.right.revs || []).length;
-  s.left = updateLeft(s.left, leftPos, dt, !!(active && input?.left?.active));
-  s.right = updateRight(s.right, rightPos, dt, now, !!(active && input?.right?.active));
-  if (active && input?.left?.active && (Math.abs(s.left.omega - prevOmega) > 1e-6 || s.left.signedOmega)) {
-    s.hintLeft = false;
-  }
+  s.right = updateRight(s.right, rightPos, dt, now, !!rightPos);
+  s.bowl = updateBowl(s.bowl, leftPos, rightPos, {
+    dt,
+    params: s.params,
+    whiskT: s.whiskT,
+    whisking: active && s.phase === "whisk",
+  });
+  if (s.bowl.held) s.hintLeft = false;
   if ((s.right.revs || []).length > prevRevs) s.hintRight = false;
-  s.bowlAngle = (Number(s.bowlAngle) || 0) + (Number(s.left.signedOmega) || 0) * 2 * Math.PI * dt;
   refreshAlignment(s, active ? input : { left: { active: false }, right: { active: false } });
 }
 
@@ -100,7 +105,7 @@ function stepPhase(s, input, dt) {
     const foam = stepFoam(
       { C: s.C, F: s.F, B: s.B },
       dt,
-      { energy: s.energy, aligned: s.aligned, overspeed: s.overspeed, idle, params: s.params },
+      { energy: s.energy, aligned: s.aligned, overspeed: s.overspeed, splash: s.splash, idle, params: s.params },
     );
     s.C = foam.C;
     s.F = foam.F;
@@ -126,7 +131,7 @@ function stepPhase(s, input, dt) {
  * Near-pure: same state+input+dt → same result. Does not mutate state or input.
  * Clamps dt to 50ms and steps foam / phases at 1/60 + remainder.
  * Gestures are applied once per call with the frame dt (positions are samples, not per-substep).
- * When landscape is false, whisk / serve are ignored and time does not advance; ω and tempo decay.
+ * When landscape is false, whisk / serve are ignored and time does not advance; tempo decays and the thumb lets go.
  */
 export function tick(state, input, dt) {
   if (state.status !== "playing") return cloneState(state);
@@ -171,11 +176,13 @@ export function createInitialState({ seed, dateJst, bestScore = 0, todayBestScor
     clock: 0,
     rngState: built.rngState,
     params: built.params,
-    left: emptyLeft(),
+    bowl: emptyBowl(),
     right: emptyRight(),
     aligned: 0,
     energy: 0,
+    steady: 0,
     overspeed: 0,
+    splash: 0,
     C: 0,
     F: 0,
     B: 0,
@@ -187,6 +194,5 @@ export function createInitialState({ seed, dateJst, bestScore = 0, todayBestScor
     hintLeft: true,
     hintRight: true,
     showDailyLine: false,
-    bowlAngle: 0,
   };
 }

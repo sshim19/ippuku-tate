@@ -1,7 +1,6 @@
-/** Positions → ω, tempo, pathQ, energy, aligned. No drawing. */
+/** Whisk positions → tempo, pathQ; with bowl steadiness → energy, aligned. No drawing. */
 
 import {
-  ALIGN_OMEGA_MIN,
   ALIGN_TEMPO_MIN,
   AMP_MAX,
   AMP_MIN,
@@ -9,19 +8,13 @@ import {
   AMP_WEIGHT,
   AXIS_ALIGN_DEG,
   AXIS_WEIGHT,
-  BOWL_CX,
-  BOWL_CY,
   CIRCLE_PATHQ_MAX,
-  OMEGA_DECAY_TAU,
-  OMEGA_SMOOTH_TAU,
   PATHQ_LOW,
   PATHQ_MIN_STROKES,
-  RATIO_OMEGA_FLOOR,
   REV_INTERVAL_MAX,
   REV_INTERVAL_MIN,
   SAMPLE_MAX,
   SAMPLE_WINDOW,
-  SPIN_R3,
   STABLE_WEIGHT,
   STROKE_MIN_PATH,
   TEMPO_DECAY_TAU,
@@ -33,17 +26,7 @@ import {
   WIDTH_PEAK,
   WIDTH_WEIGHT,
   clamp,
-  spinWeight,
 } from "./constants.mjs";
-
-export { spinWeight };
-
-export function foldPi(d) {
-  let x = d;
-  while (x > Math.PI) x -= 2 * Math.PI;
-  while (x < -Math.PI) x += 2 * Math.PI;
-  return x;
-}
 
 export function bump(x, t, tol) {
   const w = Number(tol) || 0;
@@ -78,10 +61,6 @@ function decayTowardZero(value, dt, tau) {
   return (Number(value) || 0) * Math.exp(-dt / tau);
 }
 
-export function emptyLeft() {
-  return { prevTheta: null, omega: 0, r: 0, signedOmega: 0 };
-}
-
 export function emptyRight() {
   return {
     samples: [],
@@ -97,40 +76,6 @@ export function emptyRight() {
     origin: null,
     axis: "y",
   };
-}
-
-/**
- * Update bowl spin. ω is in revolutions / second (absolute).
- * When inactive, out of the 128wu ring, or not in landscape, ω decays.
- */
-export function updateLeft(left, pos, dt, active) {
-  const next = { ...left, signedOmega: 0 };
-  if (!active || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
-    next.omega = decayTowardZero(next.omega, dt, OMEGA_DECAY_TAU);
-    return next;
-  }
-  const r = Math.hypot(pos.x - BOWL_CX, pos.y - BOWL_CY);
-  next.r = r;
-  const theta = Math.atan2(pos.y - BOWL_CY, pos.x - BOWL_CX);
-  if (r >= SPIN_R3) {
-    next.omega = decayTowardZero(next.omega, dt, OMEGA_DECAY_TAU);
-    next.prevTheta = theta;
-    return next;
-  }
-  if (next.prevTheta == null || !(dt > 0)) {
-    next.prevTheta = theta;
-    return next;
-  }
-  const dtheta = foldPi(theta - next.prevTheta);
-  next.prevTheta = theta;
-  const weight = spinWeight(r);
-  let omegaInst = Math.abs(dtheta) / dt / (2 * Math.PI);
-  if (weight < 1) omegaInst *= weight;
-  const a = 1 - Math.exp(-dt / OMEGA_SMOOTH_TAU);
-  next.omega += (omegaInst - next.omega) * a;
-  const sign = dtheta === 0 ? 0 : dtheta > 0 ? 1 : -1;
-  next.signedOmega = sign * omegaInst;
-  return next;
 }
 
 function pruneWindow(list, now, window) {
@@ -397,21 +342,19 @@ export function updateRight(right, pos, dt, now, active) {
   return next;
 }
 
-export function computeAlignment(omega, tempo, pathQ, params, handsOn) {
+/**
+ * aligned = steady × bump(tempo) × pathQ. Needs both hands: the thumb holding the bowl
+ * and a whisk at ≥ 1 reversal/s. energy (cover) only depends on the whisk.
+ */
+export function computeAlignment(steady, tempo, pathQ, params, handsOn) {
   const energy =
     (Number(pathQ) || 0) *
     clamp((Number(tempo) || 0) / Math.max(Number(params?.tempoTarget) || 0, 0.1), 0, 1.2);
-  const ratio = (Number(tempo) || 0) / Math.max(Number(omega) || 0, RATIO_OMEGA_FLOOR);
-  const alignSpeed = bump(omega, params?.omegaTarget, params?.omegaTol);
+  const alignSteady = clamp(Number(steady) || 0, 0, 1);
   const alignTempo = bump(tempo, params?.tempoTarget, params?.tempoTol) * (Number(pathQ) || 0);
-  const alignRatio = bump(ratio, params?.ratioTarget, params?.ratioTol);
   let aligned = 0;
-  if (
-    handsOn &&
-    (Number(omega) || 0) >= ALIGN_OMEGA_MIN &&
-    (Number(tempo) || 0) >= ALIGN_TEMPO_MIN
-  ) {
-    aligned = alignSpeed * alignTempo * alignRatio;
+  if (handsOn && (Number(tempo) || 0) >= ALIGN_TEMPO_MIN) {
+    aligned = alignSteady * alignTempo;
   }
-  return { aligned, energy, ratio, alignSpeed, alignTempo, alignRatio };
+  return { aligned, energy, alignSteady, alignTempo };
 }

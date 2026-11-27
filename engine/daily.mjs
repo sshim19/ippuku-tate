@@ -1,13 +1,15 @@
 /** dailyParams(rngState) → { params, rngState }. Idempotent daily bowl. */
 
 import {
+  DRIFT_PERIOD_MAX,
+  DRIFT_PERIOD_MIN,
+  DRIFT_SWING_MAX,
+  DRIFT_SWING_MIN,
   MATCHA_TABLE,
-  OMEGA_TARGET_MAX,
-  OMEGA_TARGET_MIN,
-  OMEGA_TOL_MAX,
-  OMEGA_TOL_MIN,
-  RATIO_TOL_MAX,
-  RATIO_TOL_MIN,
+  PUSH_K_MAX,
+  PUSH_K_MIN,
+  STEADY_TOL_MAX,
+  STEADY_TOL_MIN,
   TEMP_TABLE,
   TEMPO_TARGET_MAX,
   TEMPO_TARGET_MIN,
@@ -23,8 +25,8 @@ function pickRow(a, table) {
 }
 
 /**
- * Stream order: matcha stage → temp stage → ω_target → tempo_target → three tolerances.
- * ratio_target is tempo_target / ω_target.
+ * Stream order: matcha stage → temp stage → driftAngle → tempo_target → steadyTol →
+ * tempoTol → pushK → driftPeriod → driftPhase → driftSwing.
  */
 export function dailyParams(rngState) {
   let a = rngState >>> 0;
@@ -34,21 +36,19 @@ export function dailyParams(rngState) {
   picked = pickRow(a, TEMP_TABLE);
   a = picked.a;
   const tempRow = picked.row;
-  let r = rngRange(a, OMEGA_TARGET_MIN, OMEGA_TARGET_MAX);
-  a = r.a;
-  const omegaTarget = r.value;
-  r = rngRange(a, TEMPO_TARGET_MIN, TEMPO_TARGET_MAX);
-  a = r.a;
-  const tempoTarget = r.value;
-  r = rngRange(a, OMEGA_TOL_MIN, OMEGA_TOL_MAX);
-  a = r.a;
-  const omegaTol = r.value;
-  r = rngRange(a, TEMPO_TOL_MIN, TEMPO_TOL_MAX);
-  a = r.a;
-  const tempoTol = r.value;
-  r = rngRange(a, RATIO_TOL_MIN, RATIO_TOL_MAX);
-  a = r.a;
-  const ratioTol = r.value;
+  const draw = (lo, hi) => {
+    const r = rngRange(a, lo, hi);
+    a = r.a;
+    return r.value;
+  };
+  const driftAngle = draw(0, 2 * Math.PI);
+  const tempoTarget = draw(TEMPO_TARGET_MIN, TEMPO_TARGET_MAX);
+  const steadyTol = draw(STEADY_TOL_MIN, STEADY_TOL_MAX);
+  const tempoTol = draw(TEMPO_TOL_MIN, TEMPO_TOL_MAX);
+  const pushK = draw(PUSH_K_MIN, PUSH_K_MAX);
+  const driftPeriod = draw(DRIFT_PERIOD_MIN, DRIFT_PERIOD_MAX);
+  const driftPhase = draw(0, 2 * Math.PI);
+  const driftSwing = draw(DRIFT_SWING_MIN, DRIFT_SWING_MAX);
   return {
     params: {
       matcha: matchaRow.matcha,
@@ -57,12 +57,14 @@ export function dailyParams(rngState) {
       tempK: tempRow.tempK,
       tempFineK: tempRow.tempFineK,
       tempBubbleK: tempRow.tempBubbleK,
-      omegaTarget,
       tempoTarget,
-      ratioTarget: tempoTarget / omegaTarget,
-      omegaTol,
       tempoTol,
-      ratioTol,
+      steadyTol,
+      pushK,
+      driftAngle,
+      driftPeriod,
+      driftPhase,
+      driftSwing,
     },
     rngState: a,
   };
