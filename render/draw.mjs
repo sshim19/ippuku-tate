@@ -42,7 +42,6 @@ const GUIDE = "#1c2430";
 const TEA_R = 62;
 const WHISK_HOME_X = 492;
 const WHISK_HOME_Y = 210;
-const GUIDE_R = 80;
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
@@ -336,7 +335,10 @@ function drawTea(ctx, view, state, angle, reduced) {
   ctx.clip();
 
   const liquidR = r * (0.55 + 0.45 * fill);
-  const tea = ctx.createRadialGradient(cx - r * 0.15, cy - r * 0.15, r * 0.1, cx, cy, liquidR);
+  // 碗が押されて動くと、茶が逆へ寄る（揺れ）。
+  const slx = clamp(-(Number(state?.bowl?.vx) || 0) * 0.05, -6, 6);
+  const sly = clamp(-(Number(state?.bowl?.vy) || 0) * 0.05, -6, 6);
+  const tea = ctx.createRadialGradient(cx - r * 0.15 + view.px(slx), cy - r * 0.15 + view.px(sly), r * 0.1, cx + view.px(slx), cy + view.px(sly), liquidR);
   tea.addColorStop(0, colors.b);
   tea.addColorStop(0.7, colors.a);
   tea.addColorStop(1, colors.deep);
@@ -349,7 +351,7 @@ function drawTea(ctx, view, state, angle, reduced) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);
-    ctx.strokeStyle = rgba(colors.b, 0.28 + 0.2 * clamp01(state?.left?.omega));
+    ctx.strokeStyle = rgba(colors.b, 0.28 + 0.2 * clamp01(state?.energy));
     ctx.lineWidth = Math.max(0.8, view.px(1.1));
     for (let i = 1; i <= 3; i++) {
       ctx.beginPath();
@@ -476,7 +478,7 @@ function drawPour(ctx, view, fx) {
   ctx.stroke();
 }
 
-function whiskHeadInBowl(right) {
+function whiskHeadInBowl(right, off = { x: 0, y: 0 }) {
   const active = !!right?.active;
   const fx = active ? right.x - WHISK_HOME_X : 0;
   const fy = active ? right.y - WHISK_HOME_Y : 0;
@@ -491,11 +493,11 @@ function whiskHeadInBowl(right) {
     x = BOWL_CX + (dx / d) * max;
     y = BOWL_CY + (dy / d) * max;
   }
-  return { x, y, active };
+  return { x: x + off.x, y: y + off.y, active };
 }
 
-function drawChasen(ctx, view, right, reduced) {
-  const head = whiskHeadInBowl(right);
+function drawChasen(ctx, view, right, reduced, off) {
+  const head = whiskHeadInBowl(right, off);
   const handX = right?.active ? right.x : WHISK_HOME_X + 16;
   const handY = right?.active ? right.y : WHISK_HOME_Y + 8;
   const clampX = clamp(handX, RIGHT_X0 + 8, VIEW_W - 8);
@@ -577,37 +579,13 @@ function drawGuideBead(ctx, view, x, y, match, pulse, reduced) {
 function drawTempoGuides(ctx, view, state, clock, reduced) {
   if (state?.status !== "playing") return;
   if (state.phase !== "pour" && state.phase !== "whisk") return;
-  const omegaT = Number(state?.params?.omegaTarget) || 0.65;
   const tempoT = Number(state?.params?.tempoTarget) || 4;
-  const omegaTol = Number(state?.params?.omegaTol) || 0.27;
   const tempoTol = Number(state?.params?.tempoTol) || 0.85;
-  const omegaMatch = bumpMatch(state?.left?.omega, omegaT, omegaTol);
   const tempoMatch = bumpMatch(state?.right?.tempo, tempoT, tempoTol) * clamp01(state?.right?.pathQ);
   const t = Number(clock) || 0;
   const pulse = reduced ? 1 : 0.86 + 0.14 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * Math.max(2.2, tempoT * 0.5)));
 
   ctx.save();
-  const leftA = 0.34 + 0.42 * omegaMatch;
-  ctx.strokeStyle = guideColor(omegaMatch, leftA);
-  ctx.lineWidth = Math.max(1.2, view.px(1.5 + omegaMatch * 0.8));
-  ctx.setLineDash(omegaMatch > 0.72 ? [] : [view.px(3.5), view.px(4)]);
-  ctx.beginPath();
-  ctx.arc(view.sx(BOWL_CX), view.sy(BOWL_CY), view.px(GUIDE_R), 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  const ang = t * omegaT * Math.PI * 2 - Math.PI / 2;
-  const trail = 0.55;
-  ctx.strokeStyle = guideColor(omegaMatch, 0.22 + 0.4 * omegaMatch);
-  ctx.lineWidth = Math.max(1.4, view.px(2.2));
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.arc(view.sx(BOWL_CX), view.sy(BOWL_CY), view.px(GUIDE_R), ang - trail, ang);
-  ctx.stroke();
-  const bx = BOWL_CX + Math.cos(ang) * GUIDE_R;
-  const by = BOWL_CY + Math.sin(ang) * GUIDE_R;
-  drawGuideBead(ctx, view, bx, by, omegaMatch, pulse, reduced);
-
   const amp = 52;
   const width = 40;
   const cx = 492;
@@ -636,6 +614,33 @@ function drawTempoGuides(ctx, view, state, clock, reduced) {
   const beat = reduced ? 1 : 0.82 + 0.18 * (0.5 + 0.5 * Math.cos(phase * Math.PI * 2));
   drawGuideBead(ctx, view, gx, gy, tempoMatch, pulse * beat, reduced);
   ctx.restore();
+}
+
+/** 茶碗の置き場所の輪（畳の上）。碗がずれると輪から外れて見える。茶碗より先に描く。 */
+function drawHomeRing(ctx, view, state) {
+  if (state?.status !== "playing") return;
+  if (state.phase !== "pour" && state.phase !== "whisk") return;
+  const held = !!state?.bowl?.held;
+  const steady = held ? clamp01(state?.steady ?? state?.bowl?.steady) : 0;
+  ctx.save();
+  ctx.strokeStyle = guideColor(steady, 0.45 + 0.4 * steady);
+  ctx.lineWidth = Math.max(1.4, view.px(2 + steady));
+  ctx.setLineDash(steady > 0.72 ? [] : [view.px(4), view.px(4)]);
+  ctx.beginPath();
+  ctx.arc(view.sx(BOWL_CX), view.sy(BOWL_CY), view.px(BOWL_R + 7), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+/** 押さえる場所。左の指が碗に乗っていないあいだだけ、縁に印を出す。 */
+function drawGripMark(ctx, bview, state, clock, reduced) {
+  if (state?.status !== "playing") return;
+  if (state.phase !== "pour" && state.phase !== "whisk") return;
+  if (state?.bowl?.held) return;
+  const t = Number(clock) || 0;
+  const pulse = reduced ? 1 : 0.85 + 0.15 * (0.5 + 0.5 * Math.sin(t * Math.PI * 2 * 1.2));
+  drawGuideBead(ctx, bview, BOWL_CX - 80, BOWL_CY, 0.2, pulse * 1.3, reduced);
 }
 
 function drawAlignCue(ctx, view, fx, reduced) {
@@ -676,30 +681,54 @@ function drawAlignCue(ctx, view, fx, reduced) {
 function drawTouchRings(ctx, view, opts) {
   const left = opts.left;
   const right = opts.right;
-  if (left?.active) {
-    const dx = left.x - BOWL_CX;
-    const dy = left.y - BOWL_CY;
-    const d = Math.hypot(dx, dy) || 1;
-    const rim = clamp(d, 56, 108);
-    const x = BOWL_CX + (dx / d) * rim;
-    const y = BOWL_CY + (dy / d) * rim;
+  for (const p of [left, right]) {
+    if (!p?.active) continue;
     ctx.save();
     ctx.strokeStyle = rgba(GUIDE, 0.4);
     ctx.lineWidth = Math.max(1.2, view.px(1.6));
     ctx.beginPath();
-    ctx.arc(view.sx(x), view.sy(y), view.px(8), 0, Math.PI * 2);
+    ctx.arc(view.sx(p.x), view.sy(p.y), view.px(8), 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
-  if (right?.active) {
-    ctx.save();
-    ctx.strokeStyle = rgba(GUIDE, 0.4);
-    ctx.lineWidth = Math.max(1.2, view.px(1.6));
+}
+
+/**
+ * 押さえている縁の点。茶せんに押されて碗が指からずれると、指との間に細い線が出る。
+ * 線が伸びた向きと逆へ指を動かせば、碗は輪に戻る。
+ */
+function drawGripContact(ctx, view, state, left, off) {
+  const b = state?.bowl;
+  if (!b?.held || !left?.active) return;
+  if (state?.status !== "playing" || state.phase === "reveal") return;
+  const gx = BOWL_CX + off.x + (Number(b.grabX) || 0);
+  const gy = BOWL_CY + off.y + (Number(b.grabY) || 0);
+  const gap = Math.hypot(left.x - gx, left.y - gy);
+  ctx.save();
+  if (gap > 3) {
+    ctx.strokeStyle = rgba("#7a2e1a", Math.min(0.75, 0.25 + gap / 40));
+    ctx.lineWidth = Math.max(1.2, view.px(1.8));
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.arc(view.sx(right.x), view.sy(right.y), view.px(8), 0, Math.PI * 2);
+    ctx.moveTo(view.sx(left.x), view.sy(left.y));
+    ctx.lineTo(view.sx(gx), view.sy(gy));
     ctx.stroke();
-    ctx.restore();
   }
+  ctx.fillStyle = rgba("#f5f0e6", 0.85);
+  ctx.strokeStyle = rgba(GUIDE, 0.55);
+  ctx.lineWidth = Math.max(1, view.px(1.2));
+  ctx.beginPath();
+  ctx.arc(view.sx(gx), view.sy(gy), view.px(4), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** state.bowl のずれ（wu）。描画用に ±48 に切る。 */
+function bowlOffset(state) {
+  const x = clamp(Number(state?.bowl?.x) || 0, -48, 48);
+  const y = clamp(Number(state?.bowl?.y) || 0, -48, 48);
+  return { x, y };
 }
 
 /**
@@ -739,12 +768,25 @@ export function drawScene(ctx, state, opts = {}) {
   drawStillLife(ctx, view);
 
   const angle = Number(fx?.bowlAngle) || 0;
-  drawBowlBody(ctx, view, angle);
-  drawTea(ctx, view, state, angle, reduced);
-  drawSheen(ctx, view, fx, TEA_R);
-  drawPour(ctx, view, fx);
-  drawChasen(ctx, view, opts.right || { active: false, x: WHISK_HOME_X, y: WHISK_HOME_Y }, reduced);
+  const off = bowlOffset(state);
+  const bview = {
+    ...view,
+    sx(x) {
+      return view.sx(x + off.x);
+    },
+    sy(y) {
+      return view.sy(y + off.y);
+    },
+  };
+  drawHomeRing(ctx, view, state);
+  drawBowlBody(ctx, bview, angle);
+  drawTea(ctx, bview, state, angle, reduced);
+  drawSheen(ctx, bview, fx, TEA_R);
+  drawPour(ctx, bview, fx);
+  drawChasen(ctx, view, opts.right || { active: false, x: WHISK_HOME_X, y: WHISK_HOME_Y }, reduced, off);
+  drawGripMark(ctx, bview, state, fx?.clock || 0, reduced);
   drawTempoGuides(ctx, view, state, fx?.clock || 0, reduced);
+  drawGripContact(ctx, view, state, opts.left, off);
   drawTouchRings(ctx, view, opts);
   drawFx(ctx, fx, { ...view, reducedMotion: reduced }, state);
   drawAlignCue(ctx, view, fx, reduced);

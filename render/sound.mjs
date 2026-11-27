@@ -41,7 +41,7 @@ function snapshot(state) {
     energy: Number(state?.energy) || 0,
     aligned: Number(state?.aligned) || 0,
     tempo: Number(state?.right?.tempo) || 0,
-    omega: Number(state?.left?.omega) || 0,
+    steady: Number(state?.steady) || 0,
     grade: state?.grade ?? null,
     score: Math.max(0, Math.floor(Number(state?.score) || 0)),
   };

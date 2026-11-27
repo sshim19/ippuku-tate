@@ -114,11 +114,9 @@ export function syncFx(fx, state, dt, opts = {}) {
   const t = Math.max(0, Number(dt) || 0);
   fx.clock += t;
 
-  const omega = Number(state?.left?.omega) || 0;
-  if (Number.isFinite(state?.bowlAngle)) {
-    fx.bowlAngle = Number(state.bowlAngle);
-  } else if (state?.status === "playing") {
-    fx.bowlAngle += omega * Math.PI * 2 * t;
+  // 茶碗は回さない。茶せんの勢いで茶の面だけがゆっくり渦を巻く。
+  if (state?.status === "playing" && state?.phase === "whisk" && !reduced) {
+    fx.bowlAngle += clamp01(state?.energy) * 0.5 * t;
   }
 
   const phase = state?.phase;
